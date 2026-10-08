@@ -1692,6 +1692,29 @@ impl<S: IndexedIds> Repository<S> {
         commands::backup::backup(self, opts, source, snap, cancel)
     }
 
+    /// Backup from a generic [`ReadSource`] (e.g. [`FdSource`] fed by a pipe).
+    ///
+    /// Same as [`Self::backup`], but takes the source directly instead of a
+    /// `PathList`, so callers can supply non-filesystem sources.
+    ///
+    /// # Errors
+    /// Same as [`Self::backup`].
+    pub fn backup_from_source<R>(
+        &self,
+        opts: &BackupOptions,
+        source: &R,
+        backup_paths: &[PathBuf],
+        snap: SnapshotFile,
+        cancel: &Arc<AtomicBool>,
+    ) -> RusticResult<SnapshotFile>
+    where
+        R: ReadSource + 'static,
+        R::Open: Send,
+        R::Iter: Send,
+    {
+        crate::commands::backup::archive(self, opts, source, snap, backup_paths, cancel)
+    }
+
     /// Run a backup of `source` using a `ReadSource`.
     ///
     /// You have to give a preflled [`SnapshotFile`] which is modified and saved.

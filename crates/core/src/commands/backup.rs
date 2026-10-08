@@ -222,7 +222,7 @@ pub struct BackupOptions {
 /// # Returns
 ///
 /// The snapshot pointing to the backup'ed data.
-pub(crate) fn archive<R, S>(
+pub fn archive<R, S>(
     repo: &Repository<S>,
     opts: &BackupOptions,
     src: &R,

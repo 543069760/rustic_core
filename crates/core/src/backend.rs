@@ -3,6 +3,7 @@ pub(crate) mod cache;
 pub(crate) mod childstdout;
 pub(crate) mod decrypt;
 pub(crate) mod dry_run;
+pub(crate) mod fdsource;
 pub(crate) mod hotcold;
 pub(crate) mod ignore;
 pub(crate) mod local_destination;

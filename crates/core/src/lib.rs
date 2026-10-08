@@ -144,6 +144,7 @@ pub use crate::{
             },
         },
         stdin::StdinSource,
+        fdsource::FdSource,
     },
     blob::{
         BlobId, DataId, PackedId,
