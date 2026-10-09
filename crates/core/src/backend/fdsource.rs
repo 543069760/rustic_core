@@ -8,7 +8,7 @@
 
 use std::{
     fs::File,
-    io::{self, Read},
+    io::{self, BufReader, Read},
     iter::{Once, once},
     path::PathBuf,
     sync::{
@@ -25,6 +25,7 @@ use crate::{
 use super::{ReadSource, ReadSourceEntry};
 
 /// Reader that counts bytes passing through it (for `--totals` reconciliation).
+#[derive(Debug)]
 pub struct CountingFdReader {
     file: File,
     fed: Arc<AtomicU64>,
@@ -43,6 +44,7 @@ impl Read for CountingFdReader {
 /// The file is owned by the source and closed when the backup finishes or
 /// the source is dropped. `entries()` consumes the file exactly once; calling
 /// it a second time yields an error instead of silently dup'ing the fd.
+#[derive(Debug)]
 pub struct FdSource {
     /// Logical path inside the snapshot (e.g. `user.tar`).
     path: PathBuf,
@@ -68,9 +70,15 @@ impl FdSource {
     }
 }
 
+/// 管道读缓冲：把裸 fd 的逐次 syscall 聚合成 1MB 粒度，
+/// 消除 chunker 拉取时的高频 read() 开销（之前 sys CPU ~155%）。
+const FD_BUF_CAPACITY: usize = 1 << 20;
+
 impl ReadSource for FdSource {
-    type Open = CountingFdReader;
-    type Iter = Once<RusticResult<ReadSourceEntry<CountingFdReader>>>;
+    // BufReader 在 CountingFdReader 外侧：fed 统计的是 fd 实际读出量，
+    // 与 tar --totals 口径一致；若放在内侧，预读会虚增 fedBytes 破坏对账。
+    type Open = BufReader<CountingFdReader>;
+    type Iter = Once<RusticResult<ReadSourceEntry<BufReader<CountingFdReader>>>>;
 
     /// The size of a pipe stream is unknown up front; progress accounting
     /// relies on the caller-provided `sizeBytes` estimate, not on this value.
@@ -83,10 +91,13 @@ impl ReadSource for FdSource {
         let taken = self.file.lock().unwrap().take();
         once(match taken {
             Some(file) => {
-                let reader = CountingFdReader {
-                    file,
-                    fed: self.fed.clone(),
-                };
+                let reader = BufReader::with_capacity(
+                    FD_BUF_CAPACITY,
+                    CountingFdReader {
+                        file,
+                        fed: self.fed.clone(),
+                    },
+                );
                 ReadSourceEntry::from_path(self.path.clone(), Some(reader)).map_err(|err| {
                     RusticError::with_source(
                         ErrorKind::Backend,
